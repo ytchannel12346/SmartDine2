@@ -18,7 +18,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private val targetUrl = "https://chung.rf.gd/SBA_ICT_Smart_Order_System/website/smartorder.html"
-<!--    private val targetUrl = "https://chung.rf.gd/SBA_ICT_Smart_Order_System/website/smartdine.html" -->
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
