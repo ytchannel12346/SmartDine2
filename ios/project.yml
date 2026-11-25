@@ -5,12 +5,18 @@ targets:
   SmartDine:
     type: application
     platform: iOS
-    deploymentTarget: "15.0"
+    deploymentTarget: "17.0"
     sources:
-      - App
+      - path: App
     info:
       path: App/Info.plist
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: WebKit.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.smartdine.app
+        SWIFT_VERSION: "5.9"
         CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
