@@ -1,0 +1,16 @@
+name: SmartDine
+options:
+  bundleIdPrefix: com.smartdine
+targets:
+  SmartDine:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - App
+    info:
+      path: App/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.smartdine.app
+        CODE_SIGNING_ALLOWED: NO
