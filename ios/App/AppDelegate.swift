@@ -1,57 +1,74 @@
 import UIKit
 import WebKit
+import UserNotifications
 
 @main
-@MainActor
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+
     var window: UIWindow?
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        let appWindow = UIWindow(frame: UIScreen.main.bounds)
-        appWindow.rootViewController = SmartDineWebViewController()
-        appWindow.makeKeyAndVisible()
-        window = appWindow
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+
+        window = UIWindow(frame: UIScreen.main.bounds)
+        window?.rootViewController = SmartDineWebViewController()
+        window?.makeKeyAndVisible()
         return true
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        if #available(iOS 14.0, *) {
+            completionHandler([.banner, .sound, .badge])
+        } else {
+            completionHandler([.alert, .sound, .badge])
+        }
     }
 }
 
-@MainActor
-final class SmartDineWebViewController: UIViewController, WKNavigationDelegate {
+class SmartDineWebViewController: UIViewController, WKScriptMessageHandler {
+
     private var webView: WKWebView!
-    private let targetURL = "https://chung.rf.gd/SBA_ICT_Smart_Order_System/website/smartdine.html"
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        let contentController = WKUserContentController()
+        contentController.add(self, name: "iosNotify")
 
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = WKWebsiteDataStore.default()
+        config.userContentController = contentController
         config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
 
         webView = WKWebView(frame: view.bounds, configuration: config)
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        webView.navigationDelegate = self
         view.addSubview(webView)
 
-        if let url = URL(string: targetURL) {
-            webView.load(URLRequest(url: url))
+        if let indexURL = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "www") {
+            webView.loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())
         }
     }
 
-    func webView(
-        _ webView: WKWebView,
-        decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
-    ) {
-        if let url = navigationAction.request.url,
-           let scheme = url.scheme,
-           scheme != "http" && scheme != "https" {
-            UIApplication.shared.open(url)
-            decisionHandler(.cancel)
-            return
-        }
-        decisionHandler(.allow)
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "iosNotify",
+              let dict = message.body as? [String: Any],
+              let title = dict["title"] as? String,
+              let body = dict["body"] as? String else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
     }
 }
