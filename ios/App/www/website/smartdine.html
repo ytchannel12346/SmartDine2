@@ -1,1 +1,947 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>SmartDine 悅膳智能點餐系統 (Live Push & Repeating Alert v3)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <style>
+    :root { --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); }
+    body { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "PingFang HK", "Microsoft JhengHei", sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(1.3); } }
+    .live-dot { animation: pulseDot 1.5s infinite; }
+    @keyframes flashRow { 0% { background-color: #fef3c7; } 100% { background-color: #ffffff; } }
+    .flash-update { animation: flashRow 1.2s ease-out; }
+    @keyframes urgentPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.55); } 50% { box-shadow: 0 0 0 10px rgba(225, 29, 72, 0); } }
+    .urgent-call { animation: urgentPulse 1.4s infinite; }
+  </style>
+</head>
+<body class="text-slate-800">
+<div id="app" class="min-h-screen flex flex-col"></div>
 
+<!-- Optional Firebase Firestore SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+const MODE = "website"; // phone | tablet | website
+
+const I18N = {
+  zh: {
+    brand: "悅膳 SmartDine",
+    table: "桌號",
+    takeaway: "外賣自取 (免10%服務費)",
+    dinein: "堂食",
+    menu: "菜單",
+    orders: "訂單",
+    member: "會員",
+    admin: "管理",
+    cart: "購物車",
+    submitOrder: "落單傳送至廚房",
+    serviceCharge: "加一服務費 (10%)",
+    total: "合共",
+    callStaff: "呼叫服務員",
+    servedReady: "4. 已完成上菜 — 請選擇港式電子支付結賬",
+    statusSteps: ["1. 已落單", "2. 廚房製作中", "3. 準備上菜", "4. 已完成上菜"],
+    adminLogin: "員工 / 管理員登入",
+    loginBtn: "登入系統",
+    kds: "KDS 廚房顯示",
+    floor: "樓面桌況",
+    menuMgr: "菜牌管理",
+    cloudSync: "即時通知與同步"
+  },
+  cn: {
+    brand: "悦膳 SmartDine",
+    table: "桌号",
+    takeaway: "外卖自取 (免10%服务费)",
+    dinein: "堂食",
+    menu: "菜单",
+    orders: "订单",
+    member: "会员",
+    admin: "管理",
+    cart: "购物车",
+    submitOrder: "下单传送至厨房",
+    serviceCharge: "加一服务费 (10%)",
+    total: "合计",
+    callStaff: "呼叫服务员",
+    servedReady: "4. 已完成上菜 — 请选择港式电子支付结账",
+    statusSteps: ["1. 已下单", "2. 厨房制作中", "3. 准备上菜", "4. 已完成上菜"],
+    adminLogin: "员工 / 管理员登入",
+    loginBtn: "登入系统",
+    kds: "KDS 厨房显示",
+    floor: "楼面桌况",
+    menuMgr: "菜牌管理",
+    cloudSync: "实时通知与同步"
+  },
+  en: {
+    brand: "SmartDine",
+    table: "Table",
+    takeaway: "Takeaway (0% Service Fee)",
+    dinein: "Dine-In",
+    menu: "Menu",
+    orders: "Orders",
+    member: "Member",
+    admin: "Admin",
+    cart: "Cart",
+    submitOrder: "Send Order to Kitchen",
+    serviceCharge: "Service Charge (10%)",
+    total: "Total",
+    callStaff: "Call Staff",
+    servedReady: "4. Served — Choose HK E-Payment",
+    statusSteps: ["1. Ordered", "2. Cooking", "3. Plating", "4. Served"],
+    adminLogin: "Staff / Admin Login",
+    loginBtn: "Sign In",
+    kds: "KDS Kitchen",
+    floor: "Floor Map",
+    menuMgr: "Menu CRUD",
+    cloudSync: "Live Alerts & Sync"
+  },
+  ja: {
+    brand: "悦膳 SmartDine",
+    table: "テーブル",
+    takeaway: "テイクアウト (サービス料無料)",
+    dinein: "店内飲食",
+    menu: "メニュー",
+    orders: "注文履歴",
+    member: "会員",
+    admin: "管理",
+    cart: "カート",
+    submitOrder: "キッチンへ注文送信",
+    serviceCharge: "サービス料 (10%)",
+    total: "合計",
+    callStaff: "店員を呼ぶ",
+    servedReady: "4. 配膳完了 — お支払い方法を選択",
+    statusSteps: ["1. 注文受付", "2. 調理中", "3. 配膳準備", "4. 配膳完了"],
+    adminLogin: "スタッフ管理ログイン",
+    loginBtn: "ログイン",
+    kds: "KDS キッチン",
+    floor: "フロア管理",
+    menuMgr: "メニュー管理",
+    cloudSync: "リアルタイム通知"
+  }
+};
+
+const DEFAULT_MENU = [
+  { id: 1, cat: "招牌主食", price: 68, img: "🍗", zh: "秘製脆皮燒雞髀飯", cn: "秘制脆皮烧鸡腿饭", en: "Crispy Roasted Chicken Leg Rice", ja: "特製パリパリ鶏ももご飯" },
+  { id: 2, cat: "招牌主食", price: 62, img: "🥩", zh: "黑椒洋蔥厚切豬扒飯", cn: "黑椒洋葱厚切猪排饭", en: "Black Pepper Pork Chop Rice", ja: "黒胡椒ポークチョップご飯" },
+  { id: 3, cat: "湯麵烏冬", price: 56, img: "🍅", zh: "濃湯鮮茄牛肉烏冬", cn: "浓汤鲜茄牛肉乌冬", en: "Tomato Soup Beef Udon", ja: "濃厚トマト牛肉うどん" },
+  { id: 4, cat: "湯麵烏冬", price: 54, img: "🍜", zh: "雪菜肉絲湯米粉", cn: "雪菜肉丝汤米粉", en: "Preserved Veg & Pork Rice Vermicelli", ja: "高菜と豚肉の汁ビーフン" },
+  { id: 5, cat: "港式小食", price: 24, img: "🥧", zh: "酥皮牛油蛋撻 (2件)", cn: "酥皮牛油蛋挞 (2件)", en: "Flaky Butter Egg Tarts (2 pcs)", ja: "サクサクエッグタルト (2個)" },
+  { id: 6, cat: "特飲甜品", price: 22, img: "🧋", zh: "手打紅豆冰 (少冰)", cn: "手打红豆冰 (少冰)", en: "Red Bean Ice Drink", ja: "あずきミルク氷" },
+  { id: 7, cat: "特飲甜品", price: 20, img: "🥣", zh: "每日精選養生糖水", cn: "每日精选养生糖水", en: "Daily Sweet Soup", ja: "本日の特製中華スイーツ" },
+  { id: 8, cat: "港式小食", price: 36, img: "🍗", zh: "蜜汁燒雞翼 (4隻)", cn: "蜜汁烧鸡翅 (4只)", en: "Honey Glazed Chicken Wings (4 pcs)", ja: "ハニー手羽先グリル (4本)" }
+];
+
+const DEFAULT_TABLES = [
+  { id: "A01", seats: 2, status: "free", call: false },
+  { id: "A02", seats: 2, status: "occupied", call: false },
+  { id: "A08", seats: 4, status: "occupied", call: false },
+  { id: "B01", seats: 4, status: "free", call: false },
+  { id: "B02", seats: 6, status: "occupied", call: false },
+  { id: "VIP1", seats: 8, status: "free", call: false }
+];
+
+const urlParams = new URLSearchParams(window.location.search);
+const ROOM_CODE = (urlParams.get("room") || localStorage.getItem("smartdine_room") || "SMARTDINE-HK-888").toUpperCase();
+localStorage.setItem("smartdine_room", ROOM_CODE);
+
+let db = null;
+let sseSource = null;
+let callAlarmTimer = null;
+let lastCloudRev = Number(localStorage.getItem("smartdine_rev_" + ROOM_CODE) || "0");
+const bc = ("BroadcastChannel" in window) ? new BroadcastChannel("smartdine_live_" + ROOM_CODE) : null;
+
+let state = {
+  lang: "zh",
+  tab: "menu",
+  adminSub: "kds",
+  isTakeaway: false,
+  tableNo: urlParams.get("table") || "A08",
+  selectedCat: "ALL",
+  cart: [],
+  orders: JSON.parse(localStorage.getItem("smartdine_orders_" + ROOM_CODE) || "[]"),
+  menu: JSON.parse(localStorage.getItem("smartdine_menu_" + ROOM_CODE) || "null") || DEFAULT_MENU,
+  tables: JSON.parse(localStorage.getItem("smartdine_tables_" + ROOM_CODE) || "null") || DEFAULT_TABLES,
+  member: JSON.parse(localStorage.getItem("smartdine_member") || "null"),
+  couponDiscount: 0,
+  adminAuthed: false,
+  selectedPay: "Octopus 八達通",
+  syncStatus: "CONNECTING",
+  lastSyncTime: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+  toastMsg: "",
+  soundEnabled: true,
+  pushPermission: ("Notification" in window) ? Notification.permission : "unsupported",
+  firebaseRaw: localStorage.getItem("smartdine_firebase_cfg") || ""
+};
+
+// Audio Chime & Repeating Waiter-Call Alarm
+function playChime(urgent = false) {
+  if (!state.soundEnabled) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = urgent ? "triangle" : "sine";
+    if (urgent) {
+      osc.frequency.setValueAtTime(987.77, ctx.currentTime);
+      osc.frequency.setValueAtTime(1318.51, ctx.currentTime + 0.14);
+      osc.frequency.setValueAtTime(987.77, ctx.currentTime + 0.28);
+      gain.gain.setValueAtTime(0.14, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.42);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.42);
+    } else {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1174.66, ctx.currentTime + 0.14);
+      gain.gain.setValueAtTime(0.09, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.26);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.26);
+    }
+  } catch (e) {}
+}
+
+function updateRepeatingCallAlarm() {
+  const activeCalls = state.tables.filter(tb => tb.call);
+  const isStaffDevice = (MODE === "tablet" || state.adminAuthed);
+  if (activeCalls.length > 0 && isStaffDevice) {
+    if (!callAlarmTimer) {
+      playChime(true);
+      callAlarmTimer = setInterval(() => {
+        if (state.tables.some(tb => tb.call)) playChime(true);
+      }, 3500);
+    }
+  } else if (callAlarmTimer) {
+    clearInterval(callAlarmTimer);
+    callAlarmTimer = null;
+  }
+}
+
+// Native Browser System Notification + Vibration API
+async function enableSystemPush() {
+  if (!("Notification" in window)) {
+    showToast("此瀏覽器不支援系統推播通知");
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  state.pushPermission = perm;
+  render();
+  if (perm === "granted") {
+    showToast("已啟用系統桌面 / 手機背景推播通知！", true);
+    sendNativePush("悅膳 SmartDine 即時通知已啟用", "新訂單、出餐進度與顧客呼叫將會即時彈出提醒。");
+  } else {
+    showToast("通知權限未允許，請於瀏覽器設定開啟");
+  }
+}
+
+
+// Native Android & iOS Bridge for OS Status-Bar Push Notifications & Repeating Waiter Alarm
+function triggerNativeMobileBridge(title, body, isUrgent) {
+  try {
+    if (window.AndroidBridge && typeof window.AndroidBridge.notify === "function") {
+      window.AndroidBridge.notify(title, body, !!isUrgent);
+    }
+  } catch (e) {}
+  try {
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.iosNotify) {
+      window.webkit.messageHandlers.iosNotify.postMessage({ title: title, body: body, urgent: !!isUrgent });
+    }
+  } catch (e) {}
+}
+
+function sendNativePush(title, body) {
+  triggerNativeMobileBridge(title, body, title.includes('呼叫'));
+  if ("vibrate" in navigator) {
+    try { navigator.vibrate([180, 90, 180]); } catch (e) {}
+  }
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      const n = new Notification(title, {
+        body,
+        tag: "smartdine-live-alert",
+        renotify: true
+      });
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    } catch (e) {}
+  }
+}
+
+function showToast(msg, chime = false, pushTitle = "") {
+  state.toastMsg = msg;
+  if (chime) playChime(false);
+  if (pushTitle) sendNativePush(pushTitle, msg);
+  render();
+  setTimeout(() => {
+    if (state.toastMsg === msg) {
+      state.toastMsg = "";
+      render();
+    }
+  }, 3600);
+}
+
+function saveLocalCache() {
+  localStorage.setItem("smartdine_orders_" + ROOM_CODE, JSON.stringify(state.orders));
+  localStorage.setItem("smartdine_menu_" + ROOM_CODE, JSON.stringify(state.menu));
+  localStorage.setItem("smartdine_tables_" + ROOM_CODE, JSON.stringify(state.tables));
+  localStorage.setItem("smartdine_member", JSON.stringify(state.member));
+  localStorage.setItem("smartdine_rev_" + ROOM_CODE, String(lastCloudRev));
+}
+
+function applyIncomingPayload(payload, sourceLabel) {
+  if (!payload || !payload.rev || payload.rev <= lastCloudRev) return;
+  const prevOrderCount = state.orders.length;
+  const prevStatusMap = Object.fromEntries(state.orders.map(o => [o.id, o.status]));
+  const prevCalls = state.tables.filter(tb => tb.call).map(tb => tb.id);
+
+  lastCloudRev = payload.rev;
+  if (Array.isArray(payload.orders)) state.orders = payload.orders;
+  if (Array.isArray(payload.menu) && payload.menu.length) state.menu = payload.menu;
+  if (Array.isArray(payload.tables) && payload.tables.length) state.tables = payload.tables;
+  state.lastSyncTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  if (sourceLabel) state.syncStatus = sourceLabel;
+  saveLocalCache();
+  updateRepeatingCallAlarm();
+  render();
+
+  const newCalls = state.tables.filter(tb => tb.call && !prevCalls.includes(tb.id));
+  if (newCalls.length > 0) {
+    const tList = newCalls.map(x => x.id).join(", ");
+    showToast(`顧客服務鈴呼叫：${tList} 桌！`, true, `🔔 SmartDine 呼叫服務員 (${tList})`);
+    return;
+  }
+
+  if (state.orders.length > prevOrderCount) {
+    const newest = state.orders[0];
+    showToast(`新訂單 ${newest.id} (${newest.table}) 已送達！`, true, `🍽️ SmartDine 新訂單 (${newest.table})`);
+    return;
+  }
+
+  const changedOrder = state.orders.find(o => prevStatusMap[o.id] && prevStatusMap[o.id] !== o.status);
+  if (changedOrder) {
+    const stText = t("statusSteps")[changedOrder.status - 1];
+    showToast(`訂單 ${changedOrder.id} 進度更新：${stText}`, true, `📢 SmartDine 出餐進度更新`);
+  }
+}
+
+// 1. Zero-Config Cross-Device Cloud Live Push (ntfy SSE)
+const CLOUD_TOPIC = "smartdine_v3_" + ROOM_CODE.replace(/[^A-Z0-9_-]/gi, "_");
+
+async function pushCloudUpdate() {
+  lastCloudRev = Date.now();
+  state.lastSyncTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  saveLocalCache();
+  updateRepeatingCallAlarm();
+
+  if (bc) {
+    bc.postMessage({ rev: lastCloudRev, orders: state.orders, menu: state.menu, tables: state.tables });
+  }
+
+  if (db) {
+    try {
+      await db.collection("smartdine_rooms").doc(ROOM_CODE).set({
+        rev: lastCloudRev,
+        orders: state.orders,
+        menu: state.menu,
+        tables: state.tables
+      });
+      state.syncStatus = "FIRESTORE_LIVE";
+    } catch (e) {}
+  }
+
+  try {
+    await fetch("https://ntfy.sh/" + CLOUD_TOPIC, {
+      method: "POST",
+      headers: { "Title": "SmartDineSync", "Priority": "low" },
+      body: JSON.stringify({
+        rev: lastCloudRev,
+        orders: state.orders,
+        menu: state.menu,
+        tables: state.tables
+      })
+    });
+    if (!db) state.syncStatus = "CLOUD_SSE";
+    render();
+  } catch (err) {
+    if (!db) state.syncStatus = bc ? "TAB_LIVE" : "LOCAL";
+  }
+}
+
+function connectZeroConfigCloudSSE() {
+  if (sseSource) sseSource.close();
+  try {
+    sseSource = new EventSource("https://ntfy.sh/" + CLOUD_TOPIC + "/sse?since=10m");
+    sseSource.onopen = () => {
+      if (!db) state.syncStatus = "CLOUD_SSE";
+      render();
+    };
+    sseSource.onmessage = (ev) => {
+      try {
+        const wrapper = JSON.parse(ev.data);
+        if (wrapper && wrapper.message) {
+          const payload = JSON.parse(wrapper.message);
+          applyIncomingPayload(payload, db ? "FIRESTORE_LIVE" : "CLOUD_SSE");
+        }
+      } catch (e) {}
+    };
+    sseSource.onerror = () => {
+      if (!db) state.syncStatus = bc ? "TAB_LIVE" : "LOCAL";
+    };
+  } catch (e) {}
+}
+
+// 2. Optional Private Firebase Firestore Sync
+function initFirebaseLive() {
+  if (!state.firebaseRaw) return;
+  try {
+    const cfg = JSON.parse(state.firebaseRaw);
+    if (!cfg.apiKey || !cfg.projectId) return;
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    db = firebase.firestore();
+    state.syncStatus = "FIRESTORE_LIVE";
+    db.collection("smartdine_rooms").doc(ROOM_CODE).onSnapshot(doc => {
+      if (doc.exists) {
+        applyIncomingPayload(doc.data(), "FIRESTORE_LIVE");
+      }
+    });
+  } catch (err) {
+    console.warn("Firebase skipped:", err);
+  }
+}
+
+// 3. Same-Device Multi-Tab Instant Sync
+if (bc) {
+  bc.onmessage = (ev) => applyIncomingPayload(ev.data, state.syncStatus);
+}
+window.addEventListener("storage", (e) => {
+  if (e.key === "smartdine_rev_" + ROOM_CODE) {
+    state.orders = JSON.parse(localStorage.getItem("smartdine_orders_" + ROOM_CODE) || "[]");
+    state.menu = JSON.parse(localStorage.getItem("smartdine_menu_" + ROOM_CODE) || "null") || DEFAULT_MENU;
+    state.tables = JSON.parse(localStorage.getItem("smartdine_tables_" + ROOM_CODE) || "null") || DEFAULT_TABLES;
+    state.lastSyncTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    updateRepeatingCallAlarm();
+    render();
+  }
+});
+
+function t(key) { return I18N[state.lang][key] || key; }
+function itemName(item) { return item[state.lang] || item.zh; }
+
+function addToCart(id) {
+  const item = state.menu.find(m => m.id === id);
+  if (!item) return;
+  const found = state.cart.find(c => c.id === id);
+  if (found) found.qty += 1;
+  else state.cart.push({ ...item, qty: 1, note: "正常口味" });
+  render();
+}
+
+function updateQty(id, delta) {
+  const idx = state.cart.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  state.cart[idx].qty += delta;
+  if (state.cart[idx].qty <= 0) state.cart.splice(idx, 1);
+  render();
+}
+
+function calcTotals() {
+  const subtotal = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const service = state.isTakeaway ? 0 : Math.round(subtotal * 0.1);
+  const total = Math.max(0, subtotal + service - state.couponDiscount);
+  return { subtotal, service, total };
+}
+
+function submitOrder() {
+  if (!state.cart.length) return;
+  const totals = calcTotals();
+  const orderId = "ORD-" + String(Date.now()).slice(-5);
+  const newOrder = {
+    id: orderId,
+    table: state.isTakeaway ? "TAKEAWAY" : state.tableNo,
+    items: [...state.cart],
+    total: totals.total,
+    status: 1,
+    paid: false,
+    createdAt: Date.now(),
+    time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  };
+
+  state.orders.unshift(newOrder);
+  if (!state.isTakeaway) {
+    const tb = state.tables.find(x => x.id === state.tableNo);
+    if (tb) tb.status = "occupied";
+  }
+  state.cart = [];
+  state.tab = "orders";
+  pushCloudUpdate();
+  render();
+  showToast("訂單已即時推送至廚房與 POS！", true);
+}
+
+function advanceOrderStatus(orderId) {
+  const o = state.orders.find(x => x.id === orderId);
+  if (o && o.status < 4) {
+    o.status += 1;
+    pushCloudUpdate();
+    render();
+    showToast(`訂單 ${orderId} 已更新為：${t("statusSteps")[o.status - 1]}`, true);
+  }
+}
+
+function completePayment(orderId) {
+  const o = state.orders.find(x => x.id === orderId);
+  if (o) {
+    o.paid = true;
+    o.payMethod = state.selectedPay;
+    if (state.member) {
+      state.member.points = (state.member.points || 0) + Math.round(o.total);
+    }
+    pushCloudUpdate();
+    render();
+    showToast(`電子結賬完成 (${state.selectedPay})！`, true);
+  }
+}
+
+function callWaiter() {
+  const tb = state.tables.find(x => x.id === state.tableNo);
+  if (tb) tb.call = true;
+  pushCloudUpdate();
+  render();
+  showToast(`已即時呼叫服務員前往 ${state.tableNo} 桌！`, true);
+}
+
+function resolveTableCall(tableId) {
+  const tb = state.tables.find(x => x.id === tableId);
+  if (tb) tb.call = false;
+  pushCloudUpdate();
+  render();
+  showToast(`已解除 ${tableId} 桌服務呼叫`);
+}
+
+function handleAdminLogin(e) {
+  e.preventDefault();
+  const u = document.getElementById("admUser").value.trim();
+  const p = document.getElementById("admPass").value.trim();
+  if ((u === "admin" && p === "8888") || (u === "staff" && p === "1234")) {
+    state.adminAuthed = true;
+    updateRepeatingCallAlarm();
+    render();
+  } else {
+    alert("帳號或密碼錯誤 (測試帳號: admin / 8888)");
+  }
+}
+
+function addNewDish(e) {
+  e.preventDefault();
+  const zh = document.getElementById("newDishZh").value.trim();
+  const en = document.getElementById("newDishEn").value.trim() || zh;
+  const cat = document.getElementById("newDishCat").value.trim() || "招牌主食";
+  const price = Number(document.getElementById("newDishPrice").value) || 50;
+  if (!zh) return;
+  state.menu.push({ id: Date.now(), cat, price, img: "🍽️", zh, cn: zh, en, ja: en });
+  pushCloudUpdate();
+  render();
+  showToast("新菜式已即時同步至所有裝置！", true);
+}
+
+function deleteDish(id) {
+  state.menu = state.menu.filter(m => m.id !== id);
+  pushCloudUpdate();
+  render();
+}
+
+function saveRoomCode(e) {
+  e.preventDefault();
+  const code = document.getElementById("roomCodeInput").value.trim().toUpperCase();
+  if (!code) return;
+  localStorage.setItem("smartdine_room", code);
+  const u = new URL(window.location.href);
+  u.searchParams.set("room", code);
+  window.location.href = u.toString();
+}
+
+function saveFirebaseConfig(e) {
+  e.preventDefault();
+  const raw = document.getElementById("fbCfgInput").value.trim();
+  state.firebaseRaw = raw;
+  localStorage.setItem("smartdine_firebase_cfg", raw);
+  initFirebaseLive();
+  render();
+  showToast("私密 Firestore 設定已套用！");
+}
+
+function renderCartPanel() {
+  const { subtotal, service, total } = calcTotals();
+  return `
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col h-full">
+      <div class="flex items-center justify-between border-b pb-3 mb-3">
+        <h3 class="font-bold text-lg"><i class="fa-solid fa-bag-shopping text-amber-500 mr-2"></i>${t("cart")}</h3>
+        <button onclick="state.isTakeaway=!state.isTakeaway;render()" class="text-xs px-2.5 py-1 rounded-full font-semibold ${state.isTakeaway ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}">
+          ${state.isTakeaway ? t("takeaway") : t("dinein") + " · " + state.tableNo}
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto space-y-2.5 min-h-[140px]">
+        ${state.cart.length === 0 ? `<p class="text-slate-400 text-sm text-center py-8">尚未選擇菜式</p>` : state.cart.map(c => `
+          <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl">
+            <div>
+              <div class="font-semibold text-sm">${itemName(c)}</div>
+              <div class="text-xs text-slate-500">HK$${c.price} × ${c.qty}</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="updateQty(${c.id},-1)" class="w-7 h-7 rounded-full bg-white border font-bold">-</button>
+              <span class="text-sm font-bold w-4 text-center">${c.qty}</span>
+              <button onclick="updateQty(${c.id},1)" class="w-7 h-7 rounded-full bg-amber-500 text-white font-bold">+</button>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+      <div class="border-t pt-3 mt-3 space-y-1.5 text-sm">
+        <div class="flex justify-between text-slate-500"><span>小計</span><span>HK$${subtotal}</span></div>
+        <div class="flex justify-between text-slate-500"><span>${t("serviceCharge")}</span><span>HK$${service}</span></div>
+        ${state.couponDiscount > 0 ? `<div class="flex justify-between text-emerald-600"><span>會員優惠券</span><span>-HK$${state.couponDiscount}</span></div>` : ""}
+        <div class="flex justify-between font-bold text-base pt-1 border-t"><span>${t("total")}</span><span class="text-amber-600">HK$${total}</span></div>
+        <button onclick="submitOrder()" class="w-full mt-2 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold shadow">
+          ${t("submitOrder")}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMenuGrid() {
+  const cats = ["ALL", ...new Set(state.menu.map(m => m.cat))];
+  const filtered = state.selectedCat === "ALL" ? state.menu : state.menu.filter(m => m.cat === state.selectedCat);
+  const cols = MODE === "phone" ? "grid-cols-1" : (MODE === "tablet" ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4");
+  return `
+    <div>
+      <div class="flex gap-2 overflow-x-auto no-scrollbar pb-3">
+        ${cats.map(c => `
+          <button onclick="state.selectedCat='${c}';render()" class="px-3.5 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap ${state.selectedCat === c ? "bg-slate-900 text-white" : "bg-white border text-slate-600"}">
+            ${c === "ALL" ? "全部菜式" : c}
+          </button>
+        `).join("")}
+      </div>
+      <div class="grid ${cols} gap-3">
+        ${filtered.map(item => `
+          <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div class="flex items-start gap-3">
+              <div class="text-3xl bg-amber-50 w-12 h-12 rounded-xl flex items-center justify-center shrink-0">${item.img}</div>
+              <div>
+                <span class="text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-500">${item.cat}</span>
+                <h4 class="font-bold text-sm mt-1">${itemName(item)}</h4>
+              </div>
+            </div>
+            <div class="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
+              <span class="font-extrabold text-amber-600">HK$${item.price}</span>
+              <button onclick="addToCart(${item.id})" class="px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-bold hover:bg-amber-600">
+                <i class="fa-solid fa-plus mr-1"></i>加入
+              </button>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderOrdersView() {
+  const payMethods = ["Octopus 八達通", "PayMe", "AlipayHK", "WeChat Pay HK", "FPS 轉數快", "Apple Pay"];
+  if (!state.orders.length) {
+    return `<div class="bg-white rounded-2xl p-8 text-center text-slate-400 border">暫無訂單紀錄，請先於菜單落單</div>`;
+  }
+  return `
+    <div class="space-y-4">
+      ${state.orders.map(o => `
+        <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flash-update">
+          <div class="flex justify-between items-center border-b pb-2 mb-3">
+            <div>
+              <span class="font-bold">${o.id}</span>
+              <span class="ml-2 text-xs px-2 py-0.5 rounded bg-slate-100">${o.table}</span>
+            </div>
+            <span class="text-xs text-slate-400">${o.time}</span>
+          </div>
+          <div class="grid grid-cols-4 gap-1 text-center text-[11px] mb-3">
+            ${t("statusSteps").map((st, idx) => `
+              <div class="py-1.5 px-1 rounded-lg font-semibold ${o.status >= idx + 1 ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-400"}">${st}</div>
+            `).join("")}
+          </div>
+          <div class="space-y-1 text-sm mb-3">
+            ${o.items.map(i => `<div class="flex justify-between"><span>${itemName(i)} × ${i.qty}</span><span>HK$${i.price * i.qty}</span></div>`).join("")}
+          </div>
+          <div class="flex justify-between items-center font-bold border-t pt-2">
+            <span>${t("total")}: HK$${o.total}</span>
+            ${o.status < 4 ? `<button onclick="advanceOrderStatus('${o.id}')" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 text-white">模擬推進至下一階段</button>` : ""}
+          </div>
+          ${o.status === 4 && !o.paid ? `
+            <div class="mt-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200">
+              <div class="font-bold text-sm text-amber-800 mb-2">${t("servedReady")}</div>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                ${payMethods.map(pm => `
+                  <button onclick="state.selectedPay='${pm}';render()" class="p-2 rounded-xl border text-xs font-bold ${state.selectedPay === pm ? "bg-amber-500 text-white border-amber-600" : "bg-white text-slate-700"}">${pm}</button>
+                `).join("")}
+              </div>
+              <button onclick="completePayment('${o.id}')" class="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm">
+                確認使用 ${state.selectedPay} 付款 (HK$${o.total})
+              </button>
+            </div>
+          ` : ""}
+          ${o.paid ? `<div class="mt-3 p-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold text-center"><i class="fa-solid fa-circle-check mr-1"></i>已完成電子結賬 (${o.payMethod})</div>` : ""}
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderMemberView() {
+  if (!state.member) {
+    return `
+      <div class="bg-white rounded-2xl p-6 border max-w-md mx-auto">
+        <h3 class="font-bold text-lg mb-3">悅膳會員註冊 / 登入</h3>
+        <input id="memName" placeholder="輸入姓名 / 手機號碼" class="w-full border rounded-xl px-3 py-2.5 mb-3 text-sm" />
+        <button onclick="state.member={name:document.getElementById('memName').value||'VIP會員',points:120};saveLocalCache();render()" class="w-full py-2.5 rounded-xl bg-amber-500 text-white font-bold">立即登入領取 HK$10 優惠券</button>
+      </div>
+    `;
+  }
+  return `
+    <div class="bg-white rounded-2xl p-5 border max-w-lg mx-auto space-y-4">
+      <div class="flex justify-between items-center">
+        <div>
+          <h3 class="font-bold text-lg">${state.member.name}</h3>
+          <p class="text-xs text-slate-500">會員積分：${state.member.points} 分</p>
+        </div>
+        <button onclick="state.member=null;state.couponDiscount=0;saveLocalCache();render()" class="text-xs text-rose-500 underline">登出</button>
+      </div>
+      <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex justify-between items-center">
+        <div>
+          <div class="font-bold text-sm">迎新晚市 HK$10 現金券</div>
+          <div class="text-xs text-slate-500">結賬自動扣減 HK$10</div>
+        </div>
+        <button onclick="state.couponDiscount=10;state.tab='menu';render()" class="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold">
+          ${state.couponDiscount > 0 ? "已套用" : "立即使用"}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminView() {
+  if (!state.adminAuthed) {
+    return `
+      <form onsubmit="handleAdminLogin(event)" class="bg-white rounded-2xl p-6 border max-w-sm mx-auto space-y-3">
+        <h3 class="font-bold text-lg"><i class="fa-solid fa-lock text-amber-500 mr-2"></i>${t("adminLogin")}</h3>
+        <input id="admUser" placeholder="帳號 (admin / staff)" class="w-full border rounded-xl px-3 py-2 text-sm" required />
+        <input id="admPass" type="password" placeholder="密碼 (8888 / 1234)" class="w-full border rounded-xl px-3 py-2 text-sm" required />
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm">${t("loginBtn")}</button>
+      </form>
+    `;
+  }
+  const activeCalls = state.tables.filter(tb => tb.call);
+  const shareUrl = window.location.origin + window.location.pathname + "?room=" + encodeURIComponent(ROOM_CODE);
+  return `
+    <div class="space-y-4">
+      <div class="flex flex-wrap gap-2 items-center">
+        <button onclick="state.adminSub='kds';render()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold ${state.adminSub==='kds'?'bg-slate-900 text-white':'bg-white border'}">${t("kds")}</button>
+        <button onclick="state.adminSub='floor';render()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold ${state.adminSub==='floor'?'bg-slate-900 text-white':'bg-white border'}">${t("floor")} ${activeCalls.length ? `(${activeCalls.length}呼叫)` : ""}</button>
+        <button onclick="state.adminSub='menuMgr';render()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold ${state.adminSub==='menuMgr'?'bg-slate-900 text-white':'bg-white border'}">${t("menuMgr")}</button>
+        <button onclick="state.adminSub='cloudSync';render()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold ${state.adminSub==='cloudSync'?'bg-emerald-600 text-white':'bg-white border text-emerald-700'}"><i class="fa-solid fa-bell mr-1"></i>${t("cloudSync")}</button>
+        <button onclick="state.adminAuthed=false;updateRepeatingCallAlarm();render()" class="ml-auto text-xs text-rose-500 underline">登出後台</button>
+      </div>
+
+      ${state.adminSub === "kds" ? `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          ${state.orders.length === 0 ? `<p class="text-slate-400 text-sm">目前廚房無待處理訂單</p>` : state.orders.map(o => `
+            <div class="bg-white p-4 rounded-2xl border shadow-sm flash-update">
+              <div class="flex justify-between font-bold text-sm mb-2"><span>${o.id} (${o.table})</span><span class="text-amber-600">${t("statusSteps")[o.status-1]}</span></div>
+              <div class="text-xs text-slate-600 mb-3">${o.items.map(i => `${itemName(i)} x${i.qty}`).join("、")}</div>
+              ${o.status < 4 ? `<button onclick="advanceOrderStatus('${o.id}')" class="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-bold">推進出餐狀態 (跨裝置即時推送)</button>` : `<span class="text-xs text-emerald-600 font-bold">已上菜</span>`}
+            </div>
+          `).join("")}
+        </div>
+      ` : state.adminSub === "floor" ? `
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          ${state.tables.map(tb => `
+            <div class="p-4 rounded-2xl border ${tb.call ? 'bg-rose-50 border-rose-400 urgent-call' : (tb.status==='occupied' ? 'bg-amber-50 border-amber-200' : 'bg-white')}">
+              <div class="flex justify-between items-center font-bold">
+                <span>${tb.id} 桌</span>
+                <span class="text-xs px-2 py-0.5 rounded ${tb.status==='occupied'?'bg-amber-500 text-white':'bg-emerald-100 text-emerald-700'}">${tb.status==='occupied'?'用餐中':'空閒'}</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-1">${tb.seats} 人座</div>
+              ${tb.call ? `<button onclick="resolveTableCall('${tb.id}')" class="mt-2 w-full py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold">停止警報並處理呼叫</button>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      ` : state.adminSub === "cloudSync" ? `
+        <div class="space-y-4">
+          <div class="bg-white p-5 rounded-2xl border space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="font-bold text-sm"><i class="fa-solid fa-mobile-screen-button text-amber-500 mr-1.5"></i>App / 瀏覽器原生背景推播通知</h4>
+              <span class="text-xs px-2.5 py-1 rounded-full font-bold ${state.pushPermission==='granted'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">
+                ${state.pushPermission==='granted' ? '已授權系統推播' : '尚未開啟系統推播'}
+              </span>
+            </div>
+            <p class="text-xs text-slate-500">開啟後，即使切換至其他 App 或背景分頁，收到新訂單、出餐進度或顧客按鈴都會彈出原生系統通知並震動提醒。</p>
+            <button onclick="enableSystemPush()" class="px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold">
+              ${state.pushPermission==='granted' ? '測試發送系統推播通知' : '立即授權開啟系統推播'}
+            </button>
+          </div>
+
+          <form onsubmit="saveRoomCode(event)" class="bg-white p-5 rounded-2xl border space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="font-bold text-sm"><i class="fa-solid fa-wifi text-emerald-600 mr-1.5"></i>免設定跨裝置即時同步房間 (Zero-Config Cloud SSE)</h4>
+              <span class="text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-700">已自動連線 · ${ROOM_CODE}</span>
+            </div>
+            <div class="flex gap-2">
+              <input id="roomCodeInput" value="${ROOM_CODE}" class="border rounded-xl px-3 py-2 text-xs font-mono flex-1" />
+              <button type="submit" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">切換房間</button>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-50 border text-[11px] font-mono break-all text-slate-600">
+              跨裝置同步連結：${shareUrl}
+            </div>
+          </form>
+
+          <form onsubmit="saveFirebaseConfig(event)" class="bg-white p-5 rounded-2xl border space-y-3">
+            <h4 class="font-bold text-sm">進階選項：綁定專屬 Firebase Firestore 資料庫</h4>
+            <textarea id="fbCfgInput" rows="4" placeholder='{"apiKey":"...","authDomain":"...","projectId":"..."}' class="w-full border rounded-xl p-3 font-mono text-xs">${state.firebaseRaw}</textarea>
+            <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold">儲存 Firestore 設定</button>
+          </form>
+        </div>
+      ` : `
+        <form onsubmit="addNewDish(event)" class="bg-white p-4 rounded-2xl border grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <input id="newDishZh" placeholder="中文菜名" class="border rounded-xl px-2.5 py-2 text-xs" required />
+          <input id="newDishEn" placeholder="English Name" class="border rounded-xl px-2.5 py-2 text-xs" />
+          <input id="newDishCat" placeholder="分類 (如: 招牌主食)" class="border rounded-xl px-2.5 py-2 text-xs" />
+          <div class="flex gap-1">
+            <input id="newDishPrice" type="number" placeholder="價格" class="border rounded-xl px-2.5 py-2 text-xs w-20" required />
+            <button type="submit" class="flex-1 bg-emerald-600 text-white rounded-xl text-xs font-bold">新增</button>
+          </div>
+        </form>
+        <div class="bg-white rounded-2xl border divide-y">
+          ${state.menu.map(m => `
+            <div class="p-3 flex justify-between items-center text-sm">
+              <span>${m.img} ${itemName(m)} <span class="text-xs text-slate-400">(HK$${m.price})</span></span>
+              <button onclick="deleteDish(${m.id})" class="text-xs text-rose-500 font-bold">刪除</button>
+            </div>
+          `).join("")}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function render() {
+  const containerClass = MODE === "phone" ? "max-w-[480px] mx-auto w-full bg-slate-50 min-h-screen shadow-xl flex flex-col" : "w-full min-h-screen flex flex-col";
+  const badgeMap = {
+    FIRESTORE_LIVE: "FIRESTORE LIVE",
+    CLOUD_SSE: "CLOUD LIVE",
+    TAB_LIVE: "TAB LIVE",
+    CONNECTING: "SYNCING..."
+  };
+  const activeCalls = state.tables.filter(tb => tb.call);
+
+  const urgentBannerHtml = activeCalls.length > 0 ? `
+    <div class="bg-rose-600 text-white px-4 py-2 text-xs font-bold flex items-center justify-between urgent-call">
+      <span><i class="fa-solid fa-bell fa-shake mr-1.5"></i>顧客呼叫服務員：${activeCalls.map(c => c.id + " 桌").join("、")}</span>
+      <div class="flex gap-1.5">
+        ${activeCalls.map(c => `
+          <button onclick="resolveTableCall('${c.id}')" class="px-2.5 py-1 rounded bg-white text-rose-700 font-extrabold text-[11px]">
+            已處理 ${c.id}
+          </button>
+        `).join("")}
+      </div>
+    </div>
+  ` : "";
+
+  const header = `
+    <header class="bg-white border-b px-4 py-3 flex items-center justify-between sticky top-0 z-20">
+      <div class="flex items-center gap-2">
+        <span class="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black">悅</span>
+        <div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <h1 class="font-extrabold text-base leading-tight">${t("brand")}</h1>
+            <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot"></span>${badgeMap[state.syncStatus] || "LIVE"} · ${state.lastSyncTime}
+            </span>
+          </div>
+          <div class="text-[11px] text-slate-400">${MODE.toUpperCase()} · ${state.isTakeaway ? t("takeaway") : t("table") + " " + state.tableNo} · ${ROOM_CODE}</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button onclick="enableSystemPush()" title="開啟系統推播通知" class="px-2 py-1 rounded-lg text-xs font-bold ${state.pushPermission==='granted' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+        <button onclick="state.soundEnabled=!state.soundEnabled;render()" title="提示音開關" class="px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-600">
+          <i class="fa-solid ${state.soundEnabled ? 'fa-volume-high text-emerald-600' : 'fa-volume-xmark'}"></i>
+        </button>
+        <button onclick="callWaiter()" title="${t("callStaff")}" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-600 border border-rose-200">
+          <i class="fa-solid fa-bell"></i>
+        </button>
+        ${["zh","cn","en","ja"].map(l => `
+          <button onclick="state.lang='${l}';render()" class="px-2 py-1 rounded-lg text-xs font-bold ${state.lang===l?'bg-amber-500 text-white':'bg-slate-100 text-slate-600'}">${l.toUpperCase()}</button>
+        `).join("")}
+      </div>
+    </header>
+  `;
+
+  const toastHtml = state.toastMsg ? `
+    <div class="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg whitespace-nowrap">
+      <i class="fa-solid fa-bolt text-amber-400 mr-1.5"></i>${state.toastMsg}
+    </div>
+  ` : "";
+
+  let bodyHtml = "";
+  if (MODE === "tablet") {
+    bodyHtml = `
+      <div class="flex-1 flex overflow-hidden">
+        <aside class="w-20 bg-slate-900 text-white flex flex-col items-center py-4 gap-4 shrink-0">
+          ${[["menu","fa-utensils",t("menu")],["orders","fa-receipt",t("orders")],["member","fa-crown",t("member")],["admin","fa-sliders",t("admin")]].map(([k,ic,lb]) => `
+            <button onclick="state.tab='${k}';render()" class="w-16 py-2.5 rounded-2xl flex flex-col items-center gap-1 text-xs ${state.tab===k?'bg-amber-500 text-white font-bold':'text-slate-400'}">
+              <i class="fa-solid ${ic} text-base"></i><span>${lb}</span>
+            </button>
+          `).join("")}
+        </aside>
+        <main class="flex-1 p-4 overflow-y-auto">
+          ${state.tab === "menu" ? renderMenuGrid() : state.tab === "orders" ? renderOrdersView() : state.tab === "member" ? renderMemberView() : renderAdminView()}
+        </main>
+        <aside class="w-[340px] p-4 border-l bg-slate-100 shrink-0 hidden md:block">
+          ${renderCartPanel()}
+        </aside>
+      </div>
+    `;
+  } else {
+    bodyHtml = `
+      <main class="flex-1 p-4 pb-24">
+        ${state.tab === "menu" ? `<div class="${MODE==='website'?'grid grid-cols-1 lg:grid-cols-3 gap-5':''}"><div class="${MODE==='website'?'lg:col-span-2':''}">${renderMenuGrid()}</div>${MODE==='website'?`<div>${renderCartPanel()}</div>`:""}</div>` : ""}
+        ${state.tab === "cart" ? renderCartPanel() : ""}
+        ${state.tab === "orders" ? renderOrdersView() : ""}
+        ${state.tab === "member" ? renderMemberView() : ""}
+        ${state.tab === "admin" ? renderAdminView() : ""}
+      </main>
+      <nav class="fixed bottom-0 left-0 right-0 ${MODE==='phone'?'max-w-[480px] mx-auto':''} bg-white border-t grid grid-cols-5 py-2 text-center text-[11px] z-20">
+        ${[["menu","fa-utensils",t("menu")],["cart","fa-bag-shopping",t("cart")+`(${state.cart.reduce((s,i)=>s+i.qty,0)})`],["orders","fa-receipt",t("orders")],["member","fa-crown",t("member")],["admin","fa-sliders",t("admin")]].map(([k,ic,lb]) => `
+          <button onclick="state.tab='${k}';render()" class="flex flex-col items-center gap-0.5 ${state.tab===k?'text-amber-600 font-bold':'text-slate-400'}">
+            <i class="fa-solid ${ic} text-base"></i><span>${lb}</span>
+          </button>
+        `).join("")}
+      </nav>
+    `;
+  }
+
+  document.getElementById("app").innerHTML = `<div class="${containerClass}">${urgentBannerHtml}${header}${toastHtml}${bodyHtml}</div>`;
+}
+
+connectZeroConfigCloudSSE();
+initFirebaseLive();
+updateRepeatingCallAlarm();
+render();
+</script>
+</body>
+</html>
