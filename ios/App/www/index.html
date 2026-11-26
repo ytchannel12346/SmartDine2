@@ -1,1 +1,32 @@
-
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartDine 悅膳智能餐飲系統</title>
+  <script>
+    (function() {
+      const width = window.innerWidth;
+      const qs = window.location.search || "";
+      if (width < 640) {
+        window.location.replace("./phone/index.html" + qs);
+      } else if (width <= 1024) {
+        window.location.replace("./tablet/index.html" + qs);
+      } else {
+        window.location.replace("./website/smartdine.html" + qs);
+      }
+    })();
+  </script>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; background:#f8fafc; color:#334155;">
+  <div style="text-align:center;">
+    <h2>SmartDine 悅膳智能點餐</h2>
+    <p>正在為您的裝置載入最佳介面...</p>
+    <p style="font-size:14px;">
+      <a href="./phone/index.html">手機版</a> |
+      <a href="./tablet/index.html">平板 POS 版</a> |
+      <a href="./website/smartdine.html">桌面版</a>
+    </p>
+  </div>
+</body>
+</html>
